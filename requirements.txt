@@ -3,3 +3,6 @@ numpy
 matplotlib
 seaborn
 jupyterlab
+clickhouse-connect
+scikit-learn
+dotenv
