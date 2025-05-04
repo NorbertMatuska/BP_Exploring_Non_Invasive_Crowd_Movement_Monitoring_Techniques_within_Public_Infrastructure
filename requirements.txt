@@ -6,3 +6,5 @@ jupyterlab
 clickhouse-connect
 scikit-learn
 dotenv
+scapy
+tqdm
