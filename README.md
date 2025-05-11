@@ -1,6 +1,7 @@
 # Wi‑Fi Crowd Monitoring & Frame Analysis
 
 A suite of Python scripts and Jupyter notebooks for passive, non‑invasive crowd monitoring using raw IEEE 802.11 (Wi‑Fi) frames. Built as part of a Bachelor's thesis to extract, parse, store, and analyze Wi‑Fi probe and data frames for downstream crowd‑movement analytics.
+> **Note:** This README is a technical documentation for: https://github.com/NorbertMatuska/BP_Exploring_Non_Invasive_Crowd_Movement_Monitoring_Techniques_within_Public_Infrastructure
 
 ---
 
