@@ -1,42 +1,278 @@
-# Wi-Fi Crowd Monitoring & Frame Analysis
+# Wi‑Fi Crowd Monitoring & Frame Analysis
 
-This repository contains Python code and helper scripts to:
-1. **Parse** raw 802.11 frames 
-2. **Analyze** their metadata  
-3. **Insert** structured records into ClickHouse for downstream crowd-movement analytics  
-4. **Perform** higher-level analysis such as static device detection, vendor counting, and crowd estimation
-
-It is designed as part of a Bachelor's Thesis on non-invasive Wi-Fi crowd monitoring in public infrastructure.
+A suite of Python scripts and Jupyter notebooks for passive, non‑invasive crowd monitoring using raw IEEE 802.11 (Wi‑Fi) frames. Built as part of a Bachelor's thesis to extract, parse, store, and analyze Wi‑Fi probe and data frames for downstream crowd‑movement analytics.
 
 ---
 
 ## Overview
 
-This project demonstrates a pipeline for **passive crowd monitoring** by capturing raw IEEE 802.11 frames from Wi-Fi devices. After extracting key frame fields (type, subtype, source/destination MAC, RSSI, etc.), the code stores these records in a ClickHouse database for further data mining. From there, we explore:
+This repository provides a modular, end-to-end toolkit for passive, non‑invasive crowd monitoring using raw IEEE 802.11 Wi‑Fi frames, designed for both simulated and real-world deployments:
 
-- **Heatmap generation**: Visualizing data presence over time (per-minute aggregates).  
-- **Vendor analysis**: Mapping OUIs (first three bytes of MAC addresses) to hardware vendors.  
-- **Static device detection**: Identifying likely fixed devices by analyzing RSSI variance.  
-- **Crowd counting**: Estimating the number of unique devices over time, optionally filtering out “static” or “always present” signals.  
-- **Cluster-based methods**: Using DBSCAN to detect outliers or static devices by presence ratio, RSSI means, and other aggregated features.  
+1. **PCAP Conversion**: Anonymize and flatten PCAPs (ns‑3 simulation or live captures) into timestamped events via `pcap_converter.py`.
+2. **Frame Parsing & Storage**: Decode base64‑encoded 802.11 headers, extract protocol fields, enrich with OUI vendor names, and write to ClickHouse using `BP_pipeline.ipynb` (ESP32 sniffer support).
+3. **Crowd‑Counting Analysis**: Apply session‑based, clustering, decay filtering, and ML algorithms to estimate crowd sizes from `events.csv` in `BP_crowd_counter.ipynb`.
+4. **Visualization & Metrics**: Generate per‑minute activity heatmaps, vendor distributions, error analyses, and performance summaries.
+
+This pipeline supports:
+
+* **ns-3 simulation** (see monadcount‑sim)
+* **ESP32‑based sniffers** (see monad‑sniffer)
+* **ClickHouse** backend for high‑throughput analytics
+* **Jupyter notebooks** for reproducible analysis
+
+This work underpins a Bachelor's thesis on non‑invasive crowd monitoring in public spaces.
 
 ---
 
 ## Features
 
-1. **802.11 Frame Decoding**  
-   - Converts base64-encoded headers into structured data (protocol version, addresses, QoS flags, etc.).
-   - Supports probe request parsing to retrieve SSIDs, supported rates, and vendor elements.
+* **PCAP Conversion & Anonymization** (`pcap_converter.py`): HMAC‑SHA256 anonymization of MACs, relative timestamp normalization, and recursive ns‑3 OR live capture support.
+* **802.11 Frame Decoding** (`BP_pipeline.ipynb`): Base64 -> bytes, extract frame control fields (type, subtype, flags), addresses, durations, QoS/HT, and Probe IE parsing.
+* **OUI Vendor Enrichment**: Lookup IEEE OUI assignments from `oui.csv` to map MAC prefixes to vendor names, labeling unknowns.
+* **ClickHouse Integration**: Auto‑create ReplacingMergeTree tables, stream raw rows in chunks, batch insert parsed records.
+* **ESP32 Sniffer Compatibility**: Tailored parsing for ESP32‑based monadcount sniffer payloads.
+* **Session & Clustering Estimators**: Gap‑split, DBSCAN, exponential decay filters for dynamic session detection.
+* **Machine‑Learning Estimators**: SVR regression and PCA+KMeans clustering to refine crowd‑size estimates.
+* **Visualization Modules**: In‑notebook Matplotlib/Seaborn routines for heatmaps, vendor distribution bars, error boxplots, MAE heatmaps, and temporal envelopes.
+* **Configurable Workflows**: Environment‑driven credentials (`.env`), hyperparameters at notebook tops for scenario, people count, and algorithm settings.
 
-2. **ClickHouse Integration**  
-   - Code for chunked insertion from a raw table into a structured parsed table.
-   - Automatic creation of schema (if needed).
+---
 
-3. **Data Aggregation & Analysis**  
-   - Minute-level heatmap for each device (visual overview of data presence).
-   - Vendor distribution counts (bar chart with log scale).
-   - Automatic grouping by MAC addresses and sniffer location (device).
-   - Simple static-device detection function (based on RSSI variance).
+## Project Structure
 
-4. **Crowd Counting Approaches**
-   - Currently work in progress
+```
+├── BP_crowd_counter.ipynb   # Final notebook: crowd estimation & visualization
+├── BP_pipeline.ipynb        # Initial pipeline: parse & load to ClickHouse
+├── pcap_converter.py        # Converts raw PCAP streams into record tables
+├── oui.csv                  # OUI lookup: MAC prefix -> vendor name
+├── requirements.txt         # Python dependencies
+├── README.md                # (this) documentation
+└── .env.example             # Template for environment variables
+```
+
+---
+
+## Prerequisites
+
+* **Python 3.8+**
+* **ClickHouse** server
+* Access to raw 802.11 PCAP files or live capture stream
+
+---
+
+## Installation & Setup
+
+1. **Clone the repository**:
+
+   ```bash
+   git clone https://github.com/NorbertMatuska/BP_Exploring_Non_Invasive_Crowd_Movement_Monitoring_Techniques_within_Public_Infrastructure.git
+   cd BP_Exploring_Non_Invasive_Crowd_Movement_Monitoring_Techniques_within_Public_Infrastructure
+   ```
+
+2. **Create & activate a virtual environment**:
+
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+3. **Install dependencies**:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+---
+
+## Usage Guide
+
+### 1. Converting PCAPs (`pcap_converter.py`)
+
+> **Note:** The converter was designed to process PCAPs generated by an ns-3 simulation. You can find the simulation code here: [https://github.com/Sibyx/monadcount-sim](https://github.com/Sibyx/monadcount-sim)
+
+**Key Features:**
+
+* **Recursive processing**: Walks `data/<scenario>/<crowd_size>/<run>/*.pcap` folders.
+* **802.11 filtering**: Retains only Management (type 0) and Data (type 2) frames at the Dot11 layer.
+* **MAC Anonymization**: Uses HMAC‑SHA256 with a secret `_ANON_KEY` to hash original MAC addresses, preserving privacy (first 8 bytes of the digest).
+* **Relative timing**: Computes `time` (seconds) relative to the earliest frame across all files in the run.
+* **Output**: Writes `events.csv` in each run directory with columns:
+
+  * `time` (float): Seconds since start of capture.
+  * `mac` (hex): Anonymized MAC prefix.
+
+**Usage:**
+
+```bash
+python pcap_converter.py
+```
+
+No additional flags are required; ensure your PCAPs are organized under:
+
+```
+data/
+└── <scenario>/
+    └── <crowd_size>/
+        └── <run>/
+            ├── capture1.pcap
+            ├── capture2.pcap
+            └── events.csv  # generated by the script
+```
+
+**Function Breakdown:**
+
+* `anon_mac(mac: str, n_bytes: int = 8) -> str`
+  Computes a truncated HMAC of the MAC address for anonymization.
+* `extract_frames(pcap_path: Path) -> Iterator[Tuple[float, str]]`
+  Reads a PCAP, filters for Dot11 frames, applies `anon_mac`, yields `(abs_time, mac)` tuples.
+* `join_pcaps_and_save(run_dir: Path) -> None`
+  Aggregates all events in `run_dir`, normalizes timestamps to `time`, sorts, and writes `events.csv`.
+* `process_all_runs(data_root: Path) -> None`
+  Walks `data_root`, invoking `join_pcaps_and_save` for each run without an existing `events.csv`.
+
+### 2. Parsing & Ingesting Frames (`BP_pipeline.ipynb`)
+
+> **Note:** This pipeline was developed for the **monadcount** prototype using ESP32-based sniffers. See [https://github.com/Sibyx/monad-sniffer](https://github.com/Sibyx/monad-sniffer)
+
+A Jupyter notebook that decodes raw base64‑encoded 802.11 headers from a ClickHouse “raw” table, parses key fields, enriches records with vendor names, and writes structured rows back into ClickHouse for downstream analysis.
+
+**Workflow Overview:**
+
+1. **Environment & Dependencies**
+
+   * Load `.env` via `dotenv` for ClickHouse credentials.
+   * Import libraries: `pandas`, `numpy`, `base64`, `clickhouse_connect`, `scikit-learn`, plus plotting via `matplotlib` & `seaborn`.
+2. **Protocol Subtype Mappings**
+
+   * Dictionaries for **Management**, **Control**, and **Data** subtypes (IEEE 802.11 standard values).
+   * `frame_type_map` to translate numeric types (0–3) to labels.
+3. **Header Decoding & Parsing**
+
+   * `decode_header(header_b64)`: Base64 -> raw bytes.
+   * `parse_probe_request(frame_body)`: Extract SSID, rates, and vendor IEs from Probe Request payloads.
+   * `translate_header(header_bytes)`: Bit‑extract frame control fields (protocol version, type, subtype, flags), duration, QoS/HT control, addresses, and optional body parsing for management frames.
+   * Helper `_decode_supported_rates()` and `_format_mac()` for rate translation & MAC formatting.
+4. **OUI Vendor Enrichment**
+
+   * Read `oui.csv` (IEEE OUI assignments) into a `dict[Assignment -> Organization Name]`.
+   * `process_mac(mac)`: Uppercase sanitization and prefix extraction (first 6 hex digits).
+5. **ClickHouse Table Setup**
+
+   * Define `source_table` (e.g. `monadcount.l2pk_v2`) and `parsed_table` (e.g. `monadcount.l2pk_v2_struct`).
+   * Auto‑create schema using ReplacingMergeTree, keyed by `id`.
+6. **Chunked Extraction & Insert**
+
+   * Loop over `LIMIT {chunk_size} OFFSET {offset}` to stream raw rows.
+   * For each row:
+
+     * Decode & parse header.
+     * Determine `source_mac` from `address2/3/4` per `frame_type` and `to_ds`/`from_ds` flags.
+     * Map OUI to `vendor` or label as `Unknown`.
+   * Batch insert tuples into `parsed_table` with `client.insert()`.
+7. **Post‑Processing & Visualizations**
+
+   * **Activity Heatmaps**: Query distinct devices, build a date x minute pivot of presence (`has_data`), and save per‑device PNGs in `activity_heatmaps/`.
+   * **Vendor Distribution**: Bar chart (log scale) of top vendors.
+   * **Subtype Counts**: JSON‑normalize parsed headers and group by `(frame_type, subtype)` to summarize traffic patterns.
+   * **Static Device Detection**: Sketch of an RSSI‑variance based clustering function to identify fixed devices.
+
+**Running the Notebook:**
+
+1. Open `BP_pipeline.ipynb` in Jupyter Lab/Notebook.
+2. Ensure `.env` contains valid ClickHouse credentials:
+
+   ```ini
+   CLICKHOUSE_HOST=localhost
+   CLICKHOUSE_PORT=8123
+   CLICKHOUSE_USER=monad
+   CLICKHOUSE_PASS=supersecret
+   ```
+3. Execute cells in order — the notebook will:
+
+   * Connect to ClickHouse
+   * Create the parsed table if missing
+   * Stream & decode chunks of raw headers
+   * Insert parsed records
+   * Generate and save visual outputs
+
+**Expected Outputs:**
+
+```
+monadcount.l2pk_v2_struct   # Structured ClickHouse table of decoded frames
+activity_heatmaps/          # PNG heatmaps of per-device activity by minute
+(pandas DataFrames and charts in‑notebook)**
+```
+
+---
+
+### 3. Crowd‑Counting Analysis (`BP_crowd_counter.ipynb`)
+
+An interactive Jupyter notebook that pulls `events.csv` data, applies multiple crowd‑size estimation algorithms, and visualizes performance against ground truth.
+
+**Key Components:**
+
+* **Configuration & Load**:
+
+  * Set `DATA_ROOT`, `SCENARIO`, `PEOPLE_COUNT`, `RUNS` and `GROUND_TRUTH` at the top.
+  * Uses `load_events(run_dir)` to read and validate `events.csv`.
+
+* **Session & Time‑Series Builders**:
+
+  * `_sessions_to_series()`: Sweep‑line conversion of session intervals into per‑second counts.
+  * `estimate_gap_split()`: Simple gap‑splitting with `SESSION_GAP` (s) and `IDLE_TAIL` padding.
+  * `estimate_dbscan()`: DBSCAN clustering of per‑MAC timestamps for dynamic session discovery.
+  * `estimate_decay()`: Exponential decay presence filter with time constant `TAU_SEC`.
+
+* **Machine‑Learning Estimators**:
+
+  * `estimate_svr()`: SVR regression, using packet count, unique MACs, and gap‑split series as features.
+  * `estimate_kmeans()`: PCA -> KMeans clustering on engineered \[pkt\_count, uniq\_macs, session\_count] features.
+
+* **Evaluation & Metrics**:
+
+  * `eval_series()`: Computes median estimate, error, and MAE against `GROUND_TRUTH`.
+  * `analyze_run()`: Orchestrates timing (wall/CPU) and peak memory measurement via `tracemalloc`.
+  * `flatten()`: Converts a list of per‑run metric dicts into a combined DataFrame.
+
+* **Visualization Functions**:
+
+  * `plot_error_box()`: Boxplot + swarm of median errors across runs.
+  * `plot_mae_heatmap()`: Heatmap of per‑run MAE\_TS for each algorithm.
+  * `plot_temporal_envelope()`: Temporal median ± IQR envelope over runs, zoomable via `time_lim`.
+  * `plot_gt_vs_estimate()`: Bar chart comparing algorithm medians vs ground truth.
+  * Figures saved under `crowd_counting_plots/<SCENARIO>/<PEOPLE_COUNT>_<SCENARIO>_<basename>.png`.
+
+**Hyperparameters & Constants:**
+
+* `SESSION_GAP`: maximum inter‑packet gap (default 20 s)
+* `IDLE_TAIL`: session padding before/after (default 15 s)
+* `STEP_SEC`: time resolution (1 s)
+* `TAU_SEC`: decay filter time constant (200 s)
+
+**Running the Notebook:**
+
+1. Launch Jupyter and open `BP_crowd_counter.ipynb`.
+2. Adjust top‑level constants to match your `data/` layout (scenario, people count, runs).
+3. Execute cells sequentially to:
+
+   * Load raw event streams.
+   * Estimate crowd counts via 5 methods.
+   * Compute performance metrics.
+   * Generate and save visualizations.
+
+**Expected Structure:**
+
+```
+data/
+└── <scenario>/
+    └── <people_count>/
+        └── <run>/
+            └── events.csv
+crowd_counting_plots/
+└── <scenario>/<people_count>_<scenario>_*.png
+BP_crowd_counter.ipynb
+```
+
+---
+
+*Happy crowd monitoring!*
