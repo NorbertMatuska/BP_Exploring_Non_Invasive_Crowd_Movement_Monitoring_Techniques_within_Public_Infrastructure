@@ -1,7 +1,7 @@
 # Wi‑Fi Crowd Monitoring & Frame Analysis
 
 A suite of Python scripts and Jupyter notebooks for passive, non‑invasive crowd monitoring using raw IEEE 802.11 (Wi‑Fi) frames. Built as part of a Bachelor's thesis to extract, parse, store, and analyze Wi‑Fi probe and data frames for downstream crowd‑movement analytics.
-> **Note:** This README is a technical documentation for: https://github.com/NorbertMatuska/BP_Exploring_Non_Invasive_Crowd_Movement_Monitoring_Techniques_within_Public_Infrastructure
+> **Note:** This README is a technical documentation for: https://github.com/NorbertMatuska/monad-counting-toolkit.git
 
 ---
 
@@ -66,8 +66,8 @@ This work underpins a Bachelor's thesis on non‑invasive crowd monitoring in pu
 1. **Clone the repository**:
 
    ```bash
-   git clone https://github.com/NorbertMatuska/BP_Exploring_Non_Invasive_Crowd_Movement_Monitoring_Techniques_within_Public_Infrastructure.git
-   cd BP_Exploring_Non_Invasive_Crowd_Movement_Monitoring_Techniques_within_Public_Infrastructure
+   git clone https://github.com/NorbertMatuska/monad-counting-toolkit.git
+   cd monad-counting-toolkit
    ```
 
 2. **Create & activate a virtual environment**:
